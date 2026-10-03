@@ -5,6 +5,7 @@
 //#region 1. 不容易变化的部分
 import { version } from "./version";
 import { join } from "path";
+import { pathToFileURL } from "url";
 
 /**
  * 文件备份的路径
@@ -28,8 +29,11 @@ export let sConfigFile = "/naotu.config.json";
 
 /**
  * 首页的路径
+ * 用pathToFileURL生成标准的file:// URL：
+ * path.join在Windows下产生反斜杠，asar内的混合反斜杠路径
+ * 在高版本Chromium下解析会挂起（渲染进程无法启动）。
  */
-export let sIndexUrl = join(`file://${__dirname}`, "/index.html");
+export let sIndexUrl = pathToFileURL(join(__dirname, "index.html")).href;
 
 /**
  * 许可证的地址
