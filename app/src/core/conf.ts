@@ -7,6 +7,17 @@ import { Languages, sConfigVersion } from "../define";
 import { logger } from "./logger";
 
 /**
+ * 取得app实例
+ * 主进程为app；渲染进程的app为undefined，须通过@electron/remote获取。
+ * 本模块主/渲染进程共用，@electron/remote禁止在主进程require，
+ * 故此处只能按进程惰性加载。
+ */
+function getApp(): Electron.App {
+  if (app) return app;
+  return require("@electron/remote").app;
+}
+
+/**
  * 文件打开记录的格式
  */
 export declare interface IRecentlyItem {
@@ -207,7 +218,7 @@ class DesktopConfig implements IDesktopConfig {
   }
 
   getTemplate(): NaotuConfig {
-    let locale = app.getLocale();
+    let locale = getApp().getLocale();
     const lang = (locale as Languages) || "en";
 
     return new NaotuConfig(

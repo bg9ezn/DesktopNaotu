@@ -1,8 +1,31 @@
 // --> ipcMain 主线程使用的代码
 import { app, BrowserWindow, globalShortcut, Menu, ipcMain } from "electron";
+// Electron 14起remote模块从electron包中移除，改用官方替代包@electron/remote
+import { initialize as remoteInitialize, enable as remoteEnable } from "@electron/remote/main";
 import { logger } from "./core/logger";
+import { getLogDirectoryPath } from "./core/path";
+import { appendFileSync } from "fs";
+import { join } from "path";
 import { naotuConf } from "./core/conf";
 import { sIndexUrl } from "./define";
+
+/**
+ * 把未捕获异常同步写入日志目录
+ * 打包环境下stdout有缓冲且应用可能无窗口，console难以观察，
+ * 同步落盘便于排查启动问题。
+ */
+function dumpCrash(source: string, error: unknown) {
+  try {
+    const detail = error instanceof Error ? (error.stack || error.message) : String(error);
+    appendFileSync(
+      join(getLogDirectoryPath(), "main-crash.log"),
+      `[${new Date().toISOString()}] ${source}\n${detail}\n\n`
+    );
+  } catch (e) {
+    // 落盘失败时退回stderr
+    process.stderr.write(`crash dump failed: ${e}\n`);
+  }
+}
 
 // Main Method
 (() => {
@@ -17,12 +40,25 @@ import { sIndexUrl } from "./define";
 
   const isDevMode = process.execPath.match(/[\\/]electron/);
 
+  // 初始化@electron/remote，渲染进程须逐窗口enable后方可使用remote
+  remoteInitialize();
+
   process.on('unhandledRejection', error => {
     logger.error('unhandledRejection');
+    dumpCrash('unhandledRejection', error);
   });
 
   // main.ts启动顺序为：读取系统参数（如系统类型、系统语言）、读取用户设置、初始化插件模块、载入系统插件、载入用户插件、启动主界面、载入菜单栏、其他
   const createWindow = async () => {
+    try {
+      await createWindowInner();
+    } catch (error) {
+      dumpCrash('createWindow', error);
+      throw error;
+    }
+  };
+
+  const createWindowInner = async () => {
     // 隐藏菜单栏
     Menu.setApplicationMenu(null);
 
@@ -51,9 +87,14 @@ import { sIndexUrl } from "./define";
       backgroundColor: "#fbfbfb",
       webPreferences: {
         nodeIntegration: true,
-        contextIsolation: false
+        contextIsolation: false,
+        // Electron 20起渲染进程默认沙箱化，本项目依赖渲染进程直接使用Node
+        sandbox: false
       },
     });
+
+    // 允许本窗口使用remote
+    remoteEnable(mainWindow.webContents);
 
     // and load the index.html of the app.
     logger.info(`open url ${sIndexUrl} `);

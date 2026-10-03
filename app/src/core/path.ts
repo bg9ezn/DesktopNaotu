@@ -1,10 +1,20 @@
 /**
  * 路径辅助类
  */
-import { app, remote } from "electron";
+import { app } from "electron";
 import { existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { sConfigFile, sLogsDir, sBackupDir } from "../define";
+
+/**
+ * 获取app实例
+ * 本模块主/渲染进程共用，@electron/remote禁止在主进程require，
+ * 故此处按进程惰性加载。
+ */
+function getAppInstance(): Electron.App {
+  if (app) return app;
+  return require("@electron/remote").app;
+}
 
 /**
  * 获取用户目录
@@ -15,7 +25,7 @@ export function getUserDataDir() {
 
   try {
     // 获取用户目录
-    userData = (app || remote.app).getPath("userData");
+    userData = getAppInstance().getPath("userData");
 
     // 若没有用户目录，则创建
     if (!existsSync(userData)) mkdirSync(userData);
